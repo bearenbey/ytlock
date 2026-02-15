@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>YTLock - Blocked Channels</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tab.css" />
+</head>
+<body>
+  <div class="bg-noise"></div>
+  <div class="bg-glow bg-glow--1"></div>
+  <div class="bg-glow bg-glow--2"></div>
+
+  <div class="layout">
+    <header class="header">
+      <div class="header-left">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="5" y="11" width="14" height="11" rx="2" fill="url(#lockGradTab)" />
+            <path d="M8 11V7a4 4 0 1 1 8 0v4" stroke="url(#lockGradTab)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+            <circle cx="12" cy="16" r="1.5" fill="#0a0a0a" />
+            <defs>
+              <linearGradient id="lockGradTab" x1="5" y1="7" x2="19" y2="22">
+                <stop offset="0%" stop-color="#ff3333" />
+                <stop offset="100%" stop-color="#ff6b4a" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1 class="logo-text">YTLock</h1>
+      </div>
+      <div class="header-stats">
+        <div class="stat">
+          <span class="stat-num" id="count-num">0</span>
+          <span class="stat-label">Channels Blocked</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="card card--input">
+        <h2 class="card-title">Block a Channel</h2>
+        <p class="card-desc">Enter a @handle, channel name, or YouTube URL</p>
+        <div class="input-group">
+          <input type="text" id="channel-input" placeholder="e.g. @channelname" spellcheck="false" autocomplete="off" />
+          <button id="block-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="8" y1="8" x2="16" y2="16" />
+            </svg>
+            <span>Block</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="card card--settings">
+        <h2 class="card-title">Settings</h2>
+        <label class="toggle-row">
+          <div class="toggle-info">
+            <span class="toggle-label">Block all Shorts</span>
+            <span class="toggle-desc">Hide all YouTube Shorts everywhere</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="block-shorts" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </div>
+        </label>
+      </section>
+
+      <section class="card card--list">
+        <div class="list-header">
+          <h2 class="card-title">Blocked Channels</h2>
+          <div class="list-actions">
+            <span class="list-count" id="list-count"></span>
+            <button class="action-btn" id="import-btn" title="Import blocklist">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Import</span>
+            </button>
+            <button class="action-btn" id="export-btn" title="Export blocklist">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>Export</span>
+            </button>
+            <button class="action-btn action-btn--danger" id="unblock-all-btn" title="Unblock all channels">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6" /><path d="M14 11v6" />
+              </svg>
+              <span>Clear all</span>
+            </button>
+            <input type="file" id="import-file" accept=".json" hidden />
+          </div>
+        </div>
+        <div class="list-container" id="list-container">
+          <ul id="blocklist"></ul>
+          <div class="empty-state" id="empty">
+            <div class="empty-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.2">
+                <rect x="5" y="11" width="14" height="11" rx="2" />
+                <path d="M8 11V7a4 4 0 1 1 8 0v4" />
+              </svg>
+            </div>
+            <p class="empty-title">No channels blocked</p>
+            <p class="empty-desc">Add a channel above to get started</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card card--privacy">
+      <div class="privacy-row">
+        <div class="privacy-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="privacy-info">
+          <span class="privacy-title">Your Privacy</span>
+          <span class="privacy-text">YTLock does not collect, store, or transmit any personal data — all settings are kept locally on your device.</span>
+        </div>
+      </div>
+    </section>
+    </main>
+
+    <footer class="footer">
+      <p>Made with ❤️ in Amsterdam by <a href="https://unruled.one" target="_blank" rel="noopener" class="author-link">Eren Öğrül</a></p>
+      <a href="https://github.com/bearenbey/ytlock" target="_blank" rel="noopener" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </footer>
+  </div>
+  <script src="tab.js"></script>
+</body>
+</html>
