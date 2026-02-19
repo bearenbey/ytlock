@@ -3,7 +3,9 @@ const blockBtn = document.getElementById("block-btn");
 const countNumEl = document.getElementById("count-num");
 const manageLink = document.getElementById("manage-link");
 const blockShortsCheckbox = document.getElementById("block-shorts");
+const blockLiveChatCheckbox = document.getElementById("block-live-chat");
 
+// accepts a handle, channel name, or full youtube url
 function extractChannel(raw) {
   let value = raw.trim();
   try {
@@ -27,17 +29,30 @@ async function loadShortsToggle() {
   blockShortsCheckbox.checked = data.blockAllShorts;
 }
 
+async function loadLiveChatToggle() {
+  const data = await chrome.storage.sync.get({ blockLiveChat: false });
+  blockLiveChatCheckbox.checked = data.blockLiveChat;
+}
+
 blockShortsCheckbox.addEventListener("change", () => {
   chrome.storage.sync.set({ blockAllShorts: blockShortsCheckbox.checked });
 });
 
+blockLiveChatCheckbox.addEventListener("change", () => {
+  chrome.storage.sync.set({ blockLiveChat: blockLiveChatCheckbox.checked });
+});
+
 blockBtn.addEventListener("click", async () => {
   const channel = extractChannel(input.value);
-  if (!channel) return;
+  if (!channel) {
+    // flash red border to indicate bad input
+    input.style.borderColor = "rgba(255, 60, 60, 0.7)";
+    setTimeout(() => { input.style.borderColor = ""; }, 1000);
+    return;
+  }
   await chrome.runtime.sendMessage({ type: "block-channel", channel });
   input.value = "";
   updateCount();
-  // Quick flash feedback
   blockBtn.style.transform = "scale(0.9)";
   setTimeout(() => { blockBtn.style.transform = ""; }, 150);
 });
@@ -54,3 +69,4 @@ manageLink.addEventListener("click", (e) => {
 
 updateCount();
 loadShortsToggle();
+loadLiveChatToggle();

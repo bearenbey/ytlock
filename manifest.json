@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTLock",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Block YouTube channels from your feeds, search, and recommendations.",
   "permissions": ["storage", "contextMenus", "activeTab"],
   "host_permissions": ["*://*.youtube.com/*"],
@@ -27,11 +27,5 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["pixel.png"],
-      "matches": ["*://*.youtube.com/*"]
-    }
-  ]
+  }
 }

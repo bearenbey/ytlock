@@ -1,4 +1,4 @@
-// Register context menu on install
+// right-click menu on channel links
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "ytlock-block-channel",
@@ -12,19 +12,17 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "ytlock-block-channel") {
     const url = info.linkUrl;
     const channel = extractChannel(url);
     if (channel) {
       await addToBlocklist(channel);
-      // storage.onChanged in content script handles the rescan
     }
   }
 });
 
-// Handle messages from content script and popup
+// handle messages from popup and tab pages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "block-channel") {
     addToBlocklist(msg.channel).then(() => sendResponse({ ok: true }));
@@ -45,7 +43,7 @@ function extractChannel(url) {
     const u = new URL(url);
     const path = u.pathname;
     const match = path.match(/^\/(@[^\/]+|channel\/[^\/]+|c\/[^\/]+)/);
-    return match ? match[1] : null;
+    return match ? match[1].toLowerCase() : null;
   } catch {
     return null;
   }
@@ -56,18 +54,35 @@ async function getBlocklist() {
   return data.blocklist;
 }
 
+// serialize storage writes so rapid clicks don't cause race conditions
+let storageQueue = Promise.resolve();
+
 async function addToBlocklist(channel) {
-  const list = await getBlocklist();
-  const normalized = channel.toLowerCase();
-  if (!list.includes(normalized)) {
-    list.push(normalized);
-    await chrome.storage.sync.set({ blocklist: list });
-  }
+  storageQueue = storageQueue.then(async () => {
+    try {
+      const list = await getBlocklist();
+      const normalized = channel.toLowerCase();
+      if (!list.includes(normalized)) {
+        list.push(normalized);
+        await chrome.storage.sync.set({ blocklist: list });
+      }
+    } catch (e) {
+      console.error("YTLock: failed to update blocklist", e);
+    }
+  });
+  return storageQueue;
 }
 
 async function removeFromBlocklist(channel) {
-  let list = await getBlocklist();
-  const normalized = channel.toLowerCase();
-  list = list.filter((c) => c !== normalized);
-  await chrome.storage.sync.set({ blocklist: list });
+  storageQueue = storageQueue.then(async () => {
+    try {
+      let list = await getBlocklist();
+      const normalized = channel.toLowerCase();
+      list = list.filter((c) => c !== normalized);
+      await chrome.storage.sync.set({ blocklist: list });
+    } catch (e) {
+      console.error("YTLock: failed to update blocklist", e);
+    }
+  });
+  return storageQueue;
 }

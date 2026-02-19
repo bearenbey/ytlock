@@ -5,11 +5,13 @@ const countNumEl = document.getElementById("count-num");
 const listCountEl = document.getElementById("list-count");
 const emptyEl = document.getElementById("empty");
 const blockShortsCheckbox = document.getElementById("block-shorts");
+const blockLiveChatCheckbox = document.getElementById("block-live-chat");
 const exportBtn = document.getElementById("export-btn");
 const importBtn = document.getElementById("import-btn");
 const importFile = document.getElementById("import-file");
 const unblockAllBtn = document.getElementById("unblock-all-btn");
 
+// accepts a handle, channel name, or full youtube url
 function extractChannel(raw) {
   let value = raw.trim();
   try {
@@ -57,6 +59,7 @@ async function render() {
     const btn = document.createElement("button");
     btn.textContent = "Unblock";
     btn.addEventListener("click", async () => {
+      // fade out before removing
       li.style.transition = "opacity 0.2s, transform 0.2s";
       li.style.opacity = "0";
       li.style.transform = "translateX(8px)";
@@ -74,7 +77,11 @@ async function render() {
 
 blockBtn.addEventListener("click", async () => {
   const channel = extractChannel(input.value);
-  if (!channel) return;
+  if (!channel) {
+    input.style.borderColor = "rgba(255, 60, 60, 0.7)";
+    setTimeout(() => { input.style.borderColor = ""; }, 1000);
+    return;
+  }
   await chrome.runtime.sendMessage({ type: "block-channel", channel });
   input.value = "";
   render();
@@ -89,17 +96,27 @@ async function loadShortsToggle() {
   blockShortsCheckbox.checked = data.blockAllShorts;
 }
 
+async function loadLiveChatToggle() {
+  const data = await chrome.storage.sync.get({ blockLiveChat: false });
+  blockLiveChatCheckbox.checked = data.blockLiveChat;
+}
+
 blockShortsCheckbox.addEventListener("change", () => {
   chrome.storage.sync.set({ blockAllShorts: blockShortsCheckbox.checked });
 });
 
-// Export blocklist as JSON file
+blockLiveChatCheckbox.addEventListener("change", () => {
+  chrome.storage.sync.set({ blockLiveChat: blockLiveChatCheckbox.checked });
+});
+
+// save everything as json so the user can back up or move their blocklist
 exportBtn.addEventListener("click", async () => {
-  const data = await chrome.storage.sync.get({ blocklist: [], blockAllShorts: false });
+  const data = await chrome.storage.sync.get({ blocklist: [], blockAllShorts: false, blockLiveChat: false });
   const exportData = {
     version: 1,
     exportedAt: new Date().toISOString(),
     blockAllShorts: data.blockAllShorts,
+    blockLiveChat: data.blockLiveChat,
     blocklist: data.blocklist,
   };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
@@ -111,11 +128,11 @@ exportBtn.addEventListener("click", async () => {
   URL.revokeObjectURL(url);
 });
 
-// Import blocklist from JSON file
 importBtn.addEventListener("click", () => {
   importFile.click();
 });
 
+// merge imported channels into the existing blocklist (no duplicates)
 importFile.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -125,21 +142,26 @@ importFile.addEventListener("change", async (e) => {
     const imported = Array.isArray(data.blocklist) ? data.blocklist : Array.isArray(data) ? data : null;
     if (!imported) throw new Error("Invalid format");
 
-    // Merge with existing blocklist (deduplicate)
+    const validEntries = imported
+      .filter((c) => typeof c === "string" && c.length > 0 && c.length < 200)
+      .map((c) => c.toLowerCase());
+
     const existing = await chrome.runtime.sendMessage({ type: "get-blocklist" });
     const currentList = existing.blocklist || [];
-    const merged = [...new Set([...currentList, ...imported.map((c) => c.toLowerCase())])];
+    const merged = [...new Set([...currentList, ...validEntries])];
     await chrome.storage.sync.set({ blocklist: merged });
 
-    // Restore blockAllShorts setting if present
     if (typeof data.blockAllShorts === "boolean") {
       await chrome.storage.sync.set({ blockAllShorts: data.blockAllShorts });
       loadShortsToggle();
     }
+    if (typeof data.blockLiveChat === "boolean") {
+      await chrome.storage.sync.set({ blockLiveChat: data.blockLiveChat });
+      loadLiveChatToggle();
+    }
 
     render();
   } catch {
-    // Show brief error feedback on the import button
     const original = importBtn.innerHTML;
     importBtn.style.borderColor = "rgba(255, 60, 60, 0.5)";
     importBtn.innerHTML = '<span style="color: var(--accent);">Invalid file</span>';
@@ -151,7 +173,7 @@ importFile.addEventListener("change", async (e) => {
   importFile.value = "";
 });
 
-// Clear all blocked channels (with confirmation)
+// two clicks to clear - first shows "Confirm?", second actually wipes the list
 let clearConfirmPending = false;
 unblockAllBtn.addEventListener("click", async () => {
   if (!clearConfirmPending) {
@@ -177,11 +199,14 @@ unblockAllBtn.addEventListener("click", async () => {
   render();
 });
 
-// Live update when storage changes from another context
-chrome.storage.onChanged.addListener((changes) => {
+// stay in sync if another tab or the popup changes something
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") return;
   if (changes.blocklist) render();
   if (changes.blockAllShorts) loadShortsToggle();
+  if (changes.blockLiveChat) loadLiveChatToggle();
 });
 
 render();
 loadShortsToggle();
+loadLiveChatToggle();
