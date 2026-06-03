@@ -1,0 +1,35 @@
+/* Styles injected into YouTube pages by the content script.
+   content.js toggles the hooks below rather than setting inline styles. */
+
+/* Video cards, Shorts, and shelves that content.js has tagged as blocked. */
+[data-ytlock-blocked] {
+  display: none !important;
+}
+
+/* Full-page overlay shown on a blocked channel's page, and on the Shorts
+   player when Shorts are globally blocked. */
+.ytlock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #0f0f0f;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: #aaa;
+  font-family: "YouTube Sans", "Roboto", Arial, sans-serif;
+}
+
+.ytlock-overlay__message {
+  font-size: 18px;
+}
+
+.ytlock-overlay__submessage {
+  font-size: 14px;
+  color: #666;
+  margin-top: 12px;
+}

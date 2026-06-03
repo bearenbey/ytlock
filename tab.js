@@ -11,19 +11,6 @@ const importBtn = document.getElementById("import-btn");
 const importFile = document.getElementById("import-file");
 const unblockAllBtn = document.getElementById("unblock-all-btn");
 
-// accepts a handle, channel name, or full youtube url
-function extractChannel(raw) {
-  let value = raw.trim();
-  try {
-    const url = new URL(value);
-    const match = url.pathname.match(/^\/(@[^\/]+|channel\/[^\/]+|c\/[^\/]+)/);
-    if (match) return match[1].toLowerCase();
-  } catch {}
-  if (value.startsWith("@")) return value.toLowerCase();
-  if (value.length > 0 && !value.includes("/")) return ("@" + value).toLowerCase();
-  return null;
-}
-
 function getInitial(channel) {
   const name = channel.startsWith("@") ? channel.slice(1) : channel;
   return name.charAt(0).toUpperCase();
@@ -75,30 +62,12 @@ async function render() {
   }
 }
 
-blockBtn.addEventListener("click", async () => {
-  const channel = extractChannel(input.value);
-  if (!channel) {
-    input.style.borderColor = "rgba(255, 60, 60, 0.7)";
-    setTimeout(() => { input.style.borderColor = ""; }, 1000);
-    return;
-  }
-  await chrome.runtime.sendMessage({ type: "block-channel", channel });
-  input.value = "";
-  render();
-});
+YTLock.wireAddChannel(input, blockBtn, render);
 
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") blockBtn.click();
-});
-
-async function loadShortsToggle() {
-  const data = await chrome.storage.sync.get({ blockAllShorts: false });
-  blockShortsCheckbox.checked = data.blockAllShorts;
-}
-
-async function loadLiveChatToggle() {
-  const data = await chrome.storage.sync.get({ blockLiveChat: false });
-  blockLiveChatCheckbox.checked = data.blockLiveChat;
+// Reflect a setting's stored value onto its checkbox.
+async function loadToggle(checkbox, key) {
+  const data = await chrome.storage.sync.get({ [key]: false });
+  checkbox.checked = data[key];
 }
 
 blockShortsCheckbox.addEventListener("change", () => {
@@ -111,7 +80,7 @@ blockLiveChatCheckbox.addEventListener("change", () => {
 
 // save everything as json so the user can back up or move their blocklist
 exportBtn.addEventListener("click", async () => {
-  const data = await chrome.storage.sync.get({ blocklist: [], blockAllShorts: false, blockLiveChat: false });
+  const data = await YTLock.getSettings();
   const exportData = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -153,21 +122,20 @@ importFile.addEventListener("change", async (e) => {
 
     if (typeof data.blockAllShorts === "boolean") {
       await chrome.storage.sync.set({ blockAllShorts: data.blockAllShorts });
-      loadShortsToggle();
+      loadToggle(blockShortsCheckbox, "blockAllShorts");
     }
     if (typeof data.blockLiveChat === "boolean") {
       await chrome.storage.sync.set({ blockLiveChat: data.blockLiveChat });
-      loadLiveChatToggle();
+      loadToggle(blockLiveChatCheckbox, "blockLiveChat");
     }
 
     render();
   } catch {
     const original = importBtn.innerHTML;
-    importBtn.style.borderColor = "rgba(255, 60, 60, 0.5)";
+    YTLock.flashInvalid(importBtn, { color: "rgba(255, 60, 60, 0.5)", duration: 2000 });
     importBtn.innerHTML = '<span style="color: var(--accent);">Invalid file</span>';
     setTimeout(() => {
       importBtn.innerHTML = original;
-      importBtn.style.borderColor = "";
     }, 2000);
   }
   importFile.value = "";
@@ -203,10 +171,10 @@ unblockAllBtn.addEventListener("click", async () => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "sync") return;
   if (changes.blocklist) render();
-  if (changes.blockAllShorts) loadShortsToggle();
-  if (changes.blockLiveChat) loadLiveChatToggle();
+  if (changes.blockAllShorts) loadToggle(blockShortsCheckbox, "blockAllShorts");
+  if (changes.blockLiveChat) loadToggle(blockLiveChatCheckbox, "blockLiveChat");
 });
 
 render();
-loadShortsToggle();
-loadLiveChatToggle();
+loadToggle(blockShortsCheckbox, "blockAllShorts");
+loadToggle(blockLiveChatCheckbox, "blockLiveChat");

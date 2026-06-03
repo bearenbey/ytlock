@@ -1,3 +1,5 @@
+importScripts("lib/ytlock-shared.js");
+
 // right-click menu on channel links
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -14,8 +16,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "ytlock-block-channel") {
-    const url = info.linkUrl;
-    const channel = extractChannel(url);
+    const channel = YTLock.channelFromUrl(info.linkUrl);
     if (channel) {
       await addToBlocklist(channel);
     }
@@ -37,17 +38,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 });
-
-function extractChannel(url) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname;
-    const match = path.match(/^\/(@[^\/]+|channel\/[^\/]+|c\/[^\/]+)/);
-    return match ? match[1].toLowerCase() : null;
-  } catch {
-    return null;
-  }
-}
 
 async function getBlocklist() {
   const data = await chrome.storage.sync.get({ blocklist: [] });

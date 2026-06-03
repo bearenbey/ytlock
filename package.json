@@ -1,0 +1,16 @@
+{
+  "name": "ytlock",
+  "version": "3.0.0",
+  "description": "Block YouTube channels from your feeds, search, and recommendations.",
+  "private": true,
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}

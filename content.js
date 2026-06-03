@@ -6,7 +6,7 @@
   let blockLiveChat = false;
 
   async function loadSettings() {
-    const data = await chrome.storage.sync.get({ blocklist: [], blockAllShorts: false, blockLiveChat: false });
+    const data = await YTLock.getSettings();
     blocklist = data.blocklist;
     blockAllShorts = data.blockAllShorts;
     blockLiveChat = data.blockLiveChat;
@@ -30,16 +30,9 @@
     }
   });
 
-  // pull the channel handle or id from a youtube url
+  // pull the channel handle or id from a youtube url (relative hrefs allowed)
   function getChannelFromHref(href) {
-    if (!href) return null;
-    try {
-      const url = new URL(href, window.location.origin);
-      const match = url.pathname.match(/^\/(@[^\/]+|channel\/[^\/]+|c\/[^\/]+)/);
-      return match ? match[1].toLowerCase() : null;
-    } catch {
-      return null;
-    }
+    return YTLock.channelFromUrl(href, window.location.origin);
   }
 
   function isBlocked(channel) {
@@ -49,16 +42,14 @@
     );
   }
 
-  // we tag hidden elements so we can restore them later if needed
+  // we tag hidden elements so we can restore them later if needed;
+  // the [data-ytlock-blocked] rule in content.css does the actual hiding
   function hideElement(el) {
-    if (el.dataset.ytlockBlocked) return;
     el.dataset.ytlockBlocked = "true";
-    el.style.setProperty("display", "none", "important");
   }
 
   function unhideElement(el) {
     delete el.dataset.ytlockBlocked;
-    el.style.removeProperty("display");
   }
 
   // all the different video card types youtube uses
@@ -79,11 +70,19 @@
 
   const SHORTS_CONTAINER_SELECTORS = "ytd-reel-shelf-renderer, grid-shelf-view-model";
 
+  // everything scanAndBlock considers hiding in its main sweep
+  const BLOCKABLE_SELECTORS = [VIDEO_SELECTORS, SHORTS_ITEM_SELECTORS, SHORTS_CONTAINER_SELECTORS].join(", ");
+
+  // anchors that point at a channel (handle, id, or legacy /c/ name)
+  const CHANNEL_LINK_SELECTOR = 'a[href*="/@"], a[href*="/channel/"], a[href*="/c/"]';
+
+  // ids of the full-page overlays we inject
+  const CHANNEL_OVERLAY_ID = "ytlock-channel-overlay";
+  const SHORTS_OVERLAY_ID = "ytlock-shorts-overlay";
+
   // check if any channel link inside this element is on the blocklist
   function hasBlockedChannelLink(el) {
-    const channelLinks = el.querySelectorAll(
-      'a[href*="/@"], a[href*="/channel/"], a[href*="/c/"]'
-    );
+    const channelLinks = el.querySelectorAll(CHANNEL_LINK_SELECTOR);
     for (const link of channelLinks) {
       const channel = getChannelFromHref(link.href);
       if (isBlocked(channel)) return true;
@@ -110,46 +109,27 @@
     return hasBlockedChannelLink(el) || hasBlockedChannelName(el);
   }
 
+  // single source of truth for whether a feed element should be hidden:
+  // whole Shorts shelves go when Shorts are globally blocked; individual
+  // Shorts go on the global toggle or a blocked channel; everything else
+  // goes only on a blocked channel.
+  function shouldBlock(el) {
+    if (el.matches(SHORTS_CONTAINER_SELECTORS)) return blockAllShorts;
+    if (el.matches(SHORTS_ITEM_SELECTORS) || el.matches("ytd-reel-video-renderer")) {
+      return blockAllShorts || isElementBlocked(el);
+    }
+    return isElementBlocked(el);
+  }
+
   function scanAndBlock() {
-    // first pass: re-check anything we previously hid, unhide if no longer blocked
+    // re-check anything we previously hid, unhide if no longer blocked
     for (const el of document.querySelectorAll("[data-ytlock-blocked]")) {
-      const isShortsItem = el.matches(SHORTS_ITEM_SELECTORS) || el.matches("ytd-reel-video-renderer");
-      const isShortsContainer = el.matches(SHORTS_CONTAINER_SELECTORS);
-      let shouldBlock;
-      if (isShortsContainer) {
-        shouldBlock = blockAllShorts;
-      } else if (isShortsItem) {
-        shouldBlock = blockAllShorts || isElementBlocked(el);
-      } else {
-        shouldBlock = isElementBlocked(el);
-      }
-      if (!shouldBlock) {
-        unhideElement(el);
-      }
+      if (!shouldBlock(el)) unhideElement(el);
     }
 
-    // second pass: hide new stuff
-    const videoElements = document.querySelectorAll(VIDEO_SELECTORS);
-    for (const el of videoElements) {
-      if (el.dataset.ytlockBlocked) continue;
-      if (isElementBlocked(el)) {
-        hideElement(el);
-      }
-    }
-
-    const shortsItems = document.querySelectorAll(SHORTS_ITEM_SELECTORS);
-    for (const el of shortsItems) {
-      if (el.dataset.ytlockBlocked) continue;
-      if (blockAllShorts || isElementBlocked(el)) {
-        hideElement(el);
-      }
-    }
-
-    if (blockAllShorts) {
-      const shortsContainers = document.querySelectorAll(SHORTS_CONTAINER_SELECTORS);
-      for (const container of shortsContainers) {
-        hideElement(container);
-      }
+    // hide newly-appeared matches
+    for (const el of document.querySelectorAll(BLOCKABLE_SELECTORS)) {
+      if (!el.dataset.ytlockBlocked && shouldBlock(el)) hideElement(el);
     }
 
     blockChannelPage();
@@ -165,9 +145,7 @@
     if (skipping) return;
     if (!window.location.pathname.startsWith("/watch")) return;
 
-    const ownerLink = document.querySelector(
-      '#owner a[href*="/@"], #owner a[href*="/channel/"], #owner a[href*="/c/"]'
-    );
+    const ownerLink = document.querySelector("#owner")?.querySelector(CHANNEL_LINK_SELECTOR);
     if (!ownerLink) return;
 
     const channel = getChannelFromHref(ownerLink.href);
@@ -178,7 +156,7 @@
         nextBtn.click();
       } else {
         createOverlay(
-          "ytlock-channel-overlay",
+          CHANNEL_OVERLAY_ID,
           "This video is from a channel blocked by YTLock",
           "Go back or navigate to another video."
         );
@@ -188,16 +166,21 @@
   }
 
   function toggleLiveChat() {
+    // set the property (with !important) when blocking, clear it otherwise
+    const apply = (el, prop, value) => {
+      if (blockLiveChat) {
+        el.style.setProperty(prop, value, "important");
+      } else {
+        el.style.removeProperty(prop);
+      }
+    };
+
     // hide all chat-related containers
     const targets = document.querySelectorAll(
       "ytd-live-chat-frame, #chat-container, #chat, #panels-full-bleed-container"
     );
     for (const el of targets) {
-      if (blockLiveChat) {
-        el.style.setProperty("display", "none", "important");
-      } else {
-        el.style.removeProperty("display");
-      }
+      apply(el, "display", "none");
     }
 
     // youtube reserves sidebar space for chat even when hidden,
@@ -209,23 +192,14 @@
     ];
     for (const [selector, prop, value] of layoutOverrides) {
       const el = document.querySelector(selector);
-      if (!el) continue;
-      if (blockLiveChat) {
-        el.style.setProperty(prop, value, "important");
-      } else {
-        el.style.removeProperty(prop);
-      }
+      if (el) apply(el, prop, value);
     }
 
     // also hide the "Live chat" carousel card if it shows up
     const carousels = document.querySelectorAll("yt-video-metadata-carousel-view-model");
     for (const el of carousels) {
-      if (el.querySelector('h2.ytCarouselTitleViewModelTitle')?.textContent.trim() === "Live chat") {
-        if (blockLiveChat) {
-          el.style.setProperty("display", "none", "important");
-        } else {
-          el.style.removeProperty("display");
-        }
+      if (el.querySelector("h2.ytCarouselTitleViewModelTitle")?.textContent.trim() === "Live chat") {
+        apply(el, "display", "none");
       }
     }
   }
@@ -234,25 +208,14 @@
     if (document.getElementById(id)) return;
     const overlay = document.createElement("div");
     overlay.id = id;
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: #0f0f0f;
-      z-index: 99999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      color: #aaa;
-      font-family: 'YouTube Sans', 'Roboto', Arial, sans-serif;
-    `;
+    overlay.className = "ytlock-overlay";
     const p1 = document.createElement("p");
-    p1.style.cssText = "font-size: 18px;";
+    p1.className = "ytlock-overlay__message";
     p1.textContent = message;
     overlay.appendChild(p1);
     if (submessage) {
       const p2 = document.createElement("p");
-      p2.style.cssText = "font-size: 14px; color: #666; margin-top: 12px;";
+      p2.className = "ytlock-overlay__submessage";
       p2.textContent = submessage;
       overlay.appendChild(p2);
     }
@@ -260,27 +223,27 @@
   }
 
   function removeOverlays() {
-    const channel = document.getElementById("ytlock-channel-overlay");
+    const channel = document.getElementById(CHANNEL_OVERLAY_ID);
     if (channel) channel.remove();
-    const shorts = document.getElementById("ytlock-shorts-overlay");
+    const shorts = document.getElementById(SHORTS_OVERLAY_ID);
     if (shorts) shorts.remove();
   }
 
   // cover the entire page if we're on a blocked channel's page
   function blockChannelPage() {
     const path = window.location.pathname.toLowerCase();
-    const match = path.match(/^\/(@[^\/]+|channel\/[^\/]+|c\/[^\/]+)/);
+    const match = path.match(YTLock.CHANNEL_PATH_RE);
     if (!match) return;
 
     const channel = match[1];
     if (!isBlocked(channel)) {
-      const overlay = document.getElementById("ytlock-channel-overlay");
+      const overlay = document.getElementById(CHANNEL_OVERLAY_ID);
       if (overlay) overlay.remove();
       return;
     }
 
     createOverlay(
-      "ytlock-channel-overlay",
+      CHANNEL_OVERLAY_ID,
       "This channel is blocked by YTLock",
       "Unblock it from the YTLock popup to view this page."
     );
@@ -290,12 +253,12 @@
     if (!window.location.pathname.startsWith("/shorts/")) return;
 
     if (blockAllShorts) {
-      createOverlay("ytlock-shorts-overlay", "Shorts are blocked by YTLock");
+      createOverlay(SHORTS_OVERLAY_ID, "Shorts are blocked by YTLock");
       return;
     }
 
     // clean up overlay if shorts were just re-enabled
-    const shortsOverlay = document.getElementById("ytlock-shorts-overlay");
+    const shortsOverlay = document.getElementById(SHORTS_OVERLAY_ID);
     if (shortsOverlay) shortsOverlay.remove();
 
     const reels = document.querySelectorAll("ytd-reel-video-renderer");
